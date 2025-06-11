@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>避障小车游戏</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background: #222;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      user-select: none;
+    }
+    canvas {
+      background: #333;
+      border: 2px solid #111;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" width="400" height="600"></canvas>
+  <script>
+    window.onload = () => {
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+
+      // 三车道 x 坐标
+      const lanes = [80, 180, 280];
+      let laneIndex = 1; // 初始在中间车道
+      let score = 0;
+      let gameOver = false;
+      let speedIncreaseInterval = 5000; // 每隔 5 秒加速
+      let lastSpeedIncrease = Date.now();
+
+      const player = {
+        x: lanes[laneIndex],
+        y: 500,
+        width: 40,
+        height: 80,
+        color: "#66fcf1"
+      };
+
+      const enemies = []; // 障碍物数组
+
+      // 生成一辆来车
+      function createEnemy() {
+        const lane = Math.floor(Math.random() * lanes.length);
+        // 随机速度：基础 + 随时间增长
+        const baseSpeed = 3;
+        const extra = Math.random() * 2;
+        enemies.push({
+          x: lanes[lane],
+          y: -100,
+          width: 40,
+          height: 80,
+          speed: baseSpeed + extra + Math.floor(score / 10) * 0.5, // 随分数略增速
+          color: "#f44336"
+        });
+      }
+
+      // 画路面和虚线车道线
+      function drawRoad() {
+        ctx.fillStyle = "#333";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = "#ffffff33";
+        ctx.lineWidth = 4;
+        for (let i = 1; i < lanes.length; i++) {
+          ctx.beginPath();
+          ctx.setLineDash([20, 15]);
+          const x = lanes[i] - 40; // 80,180,280 对应的分割线位置
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvas.height);
+          ctx.stroke();
+        }
+      }
+
+      // 画一辆车
+      function drawCar(car) {
+        ctx.fillStyle = car.color;
+        ctx.fillRect(car.x, car.y, car.width, car.height);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(car.x + 10, car.y + 10, 20, 15);
+      }
+
+      // 主循环
+      function update() {
+        if (gameOver) {
+          // 显示 Game Over 和得分
+          ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.fillStyle = "#ff4444";
+          ctx.font = "36px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+          ctx.fillStyle = "#fff";
+          ctx.font = "24px sans-serif";
+          ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 20);
+          ctx.font = "18px sans-serif";
+          ctx.fillText("Refresh 重玩", canvas.width / 2, canvas.height / 2 + 60);
+          return;
+        }
+
+        // 清空 & 画路
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawRoad();
+
+        // 画玩家
+        drawCar(player);
+
+        // 更新并画敌车
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          e.y += e.speed;
+          drawCar(e);
+
+          // 碰撞检测
+          if (
+            player.x < e.x + e.width &&
+            player.x + player.width > e.x &&
+            player.y < e.y + e.height &&
+            player.y + player.height > e.y
+          ) {
+            gameOver = true;
+          }
+
+          // 出屏后移除并加分
+          if (e.y > canvas.height) {
+            enemies.splice(i, 1);
+            score++;
+          }
+        }
+
+        // 显示分数
+        ctx.fillStyle = "#fff";
+        ctx.font = "18px sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText("Score: " + score, 10, 30);
+
+        // 随时间加速
+        if (Date.now() - lastSpeedIncrease > speedIncreaseInterval) {
+          lastSpeedIncrease = Date.now();
+          // 生成更快的来车：这里通过提高基础速度或减少 spawn 间隔来体现
+          // spawnInterval 会在下一段逻辑里调整
+        }
+
+        requestAnimationFrame(update);
+      }
+
+      // 键盘监听，全局捕获
+      document.addEventListener("keydown", (e) => {
+        if (gameOver) return;
+        if (e.key === "ArrowLeft") {
+          if (laneIndex > 0) {
+            laneIndex--;
+            player.x = lanes[laneIndex];
+          }
+        }
+        if (e.key === "ArrowRight") {
+          if (laneIndex < lanes.length - 1) {
+            laneIndex++;
+            player.x = lanes[laneIndex];
+          }
+        }
+      });
+
+      // 持续生成敌车：初始间隔 1000ms，随着得分可考虑缩短
+      let spawnInterval = 1000;
+      let spawnTimer = setInterval(() => {
+        if (!gameOver) {
+          createEnemy();
+          // 根据分数调整间隔：每 10 分减少 50ms，但不低于 400ms
+          const newInterval = Math.max(400, 1000 - Math.floor(score / 10) * 50);
+          if (newInterval !== spawnInterval) {
+            spawnInterval = newInterval;
+            clearInterval(spawnTimer);
+            spawnTimer = setInterval(() => {
+              if (!gameOver) createEnemy();
+            }, spawnInterval);
+          }
+        }
+      }, spawnInterval);
+
+      // 启动主循环
+      update();
+    };
+  </script>
+</body>
+</html>
